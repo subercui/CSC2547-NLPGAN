@@ -102,14 +102,14 @@ class RelGANInstructor(BasicInstructor):
         total_loss = 0
         for step in range(g_step):
             real_samples = F.one_hot(self.oracle_data.random_batch()['target'], cfg.vocab_size).float()
-            gen_samples = self.gen.sample(cfg.batch_size, cfg.batch_size, one_hot=True)
+            gen_samples, o_g = self.gen.sample(cfg.batch_size, cfg.batch_size, one_hot=True)
             if cfg.CUDA:
                 real_samples, gen_samples = real_samples.cuda(), gen_samples.cuda()
 
             # ===Train===
             d_out_real = self.dis(real_samples)
             d_out_fake = self.dis(gen_samples)
-            g_loss, _ = get_losses(d_out_real, d_out_fake, cfg.loss_type)
+            g_loss, _ = get_losses(d_out_real, d_out_fake, cfg.loss_type, eps=0.1, o_g=o_g, z_hard=gen_samples)
 
             self.optimize(self.gen_adv_opt, g_loss, self.gen)
             total_loss += g_loss.item()
@@ -120,14 +120,14 @@ class RelGANInstructor(BasicInstructor):
         total_loss = 0
         for step in range(d_step):
             real_samples = F.one_hot(self.oracle_data.random_batch()['target'], cfg.vocab_size).float()
-            gen_samples = self.gen.sample(cfg.batch_size, cfg.batch_size, one_hot=True)
+            gen_samples, o_g = self.gen.sample(cfg.batch_size, cfg.batch_size, one_hot=True)
             if cfg.CUDA:
                 real_samples, gen_samples = real_samples.cuda(), gen_samples.cuda()
 
             # ===Train===
             d_out_real = self.dis(real_samples)
             d_out_fake = self.dis(gen_samples)
-            _, d_loss = get_losses(d_out_real, d_out_fake, cfg.loss_type)
+            _, d_loss = get_losses(d_out_real, d_out_fake, cfg.loss_type, eps=1, o_g=o_g, z_hard=gen_samples)
 
             self.optimize(self.dis_opt, d_loss, self.dis)
             total_loss += d_loss.item()

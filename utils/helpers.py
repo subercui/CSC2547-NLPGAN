@@ -106,9 +106,13 @@ def get_fixed_temperature(temper, i, N, adapt):
         raise Exception("Unknown adapt type!")
 
     return temper_var_np
-
-
-def get_losses(d_out_real, d_out_fake, loss_type='JS'):
+is_cuda = torch.cuda.is_available()
+def to_var(x):
+    if is_cuda:
+        x = x.cuda()
+    return x
+cuda0 = torch.device('cuda:0')
+def get_losses(d_out_real, d_out_fake, loss_type='JS', eps=1.0, o_g=None, z_hard=None):
     """Get different adversarial losses according to given loss_type"""
     bce_loss = nn.BCEWithLogitsLoss()
 
@@ -150,6 +154,24 @@ def get_losses(d_out_real, d_out_fake, loss_type='JS'):
 
     else:
         raise NotImplementedError("Divergence '%s' is not implemented" % loss_type)
+
+    if eps != 1.0:
+        g_loss_eps = g_loss * eps
+        g_loss_eps = o_g - g_loss_eps
+        shape = g_loss_eps.size()
+        # print(g_loss_eps.shape)
+        _, k = g_loss_eps.max(-1)
+        #print(k.shape)
+        #print(torch.FloatTensor(*shape).zero_().shape)
+        indecis = torch.FloatTensor(*shape).zero_()
+        indecis[:, :, k] = 1
+        #print(k.view(-1, 1).shape)
+        #ones = torch.ones(k.view(-1, 1).shape, device=cuda0)
+        change = to_var(indecis)
+        gradients = z_hard - change
+        gradients = gradients*(1.0/eps)
+
+        g_loss = torch.sum(to_var(gradients)*o_g)
 
     return g_loss, d_loss
 

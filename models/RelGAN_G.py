@@ -54,8 +54,8 @@ class RelGAN_G(LSTMGenerator):
         out, hidden = self.lstm(emb, hidden)
         gumbel_t = self.add_gumbel(self.lstm2out(out.squeeze(1)))
         next_token = torch.argmax(gumbel_t, dim=1).detach()
-        # next_token_onehot = F.one_hot(next_token, cfg.vocab_size).float()  # not used yet
-        next_token_onehot = None
+        next_token_onehot = F.one_hot(next_token, cfg.vocab_size).float()  # not used yet
+        # next_token_onehot = None
 
         pred = F.softmax(gumbel_t * self.temperature, dim=-1)  # batch_size * vocab_size
         # next_o = torch.sum(next_token_onehot * pred, dim=1)  # not used yet
@@ -72,12 +72,16 @@ class RelGAN_G(LSTMGenerator):
             - samples: all samples
         """
         global all_preds
+        global all_preds_o_g
+
         num_batch = num_samples // batch_size + 1 if num_samples != batch_size else 1
         samples = torch.zeros(num_batch * batch_size, self.max_seq_len).long()
         if one_hot:
             all_preds = torch.zeros(batch_size, self.max_seq_len, self.vocab_size)
+            all_preds_o_g = torch.zeros(batch_size, self.max_seq_len, self.vocab_size)
             if self.gpu:
                 all_preds = all_preds.cuda()
+                all_preds_o_g = all_preds.cuda()
 
         for b in range(num_batch):
             hidden = self.init_hidden(batch_size)
@@ -86,15 +90,16 @@ class RelGAN_G(LSTMGenerator):
                 inp = inp.cuda()
 
             for i in range(self.max_seq_len):
-                pred, hidden, next_token, _, _ = self.step(inp, hidden)
+                pred, hidden, next_token, next_token_onehot, _ = self.step(inp, hidden)
                 samples[b * batch_size:(b + 1) * batch_size, i] = next_token
                 if one_hot:
-                    all_preds[:, i] = pred
+                    all_preds[:, i] = next_token_onehot
+                    all_preds_o_g[:, i] = pred
                 inp = next_token
         samples = samples[:num_samples]  # num_samples * seq_len
 
         if one_hot:
-            return all_preds  # batch_size * seq_len * vocab_size
+            return all_preds, all_preds_o_g  # batch_size * seq_len * vocab_size
         return samples
 
     def init_hidden(self, batch_size=cfg.batch_size):
